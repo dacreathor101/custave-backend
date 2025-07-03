@@ -1,57 +1,45 @@
-import express from 'express';
-import axios from 'axios';
-import cheerio from 'cheerio';
-import CurrencyConverter from 'currency-converter-lt';
-import cors from 'cors';
+const express = require('express');
+const axios = require('axios');
+const cheerio = require('cheerio');
+const cors = require('cors');
 
 const app = express();
+const PORT = process.env.PORT || 3000;
+
 app.use(cors());
 app.use(express.json());
 
 app.post('/import', async (req, res) => {
   const { link } = req.body;
 
-  if (!link || (!link.includes('temu.com') && !link.includes('pascaldesign.com'))) {
-    return res.status(400).json({ message: 'Invalid link provided.' });
-  }
-
   try {
-    const html = (await axios.get(link)).data;
-    const $ = cheerio.load(html);
+    const response = await axios.get(link);
+    const $ = cheerio.load(response.data);
 
-    let title = $('title').text().trim();
-    let priceText = $('meta[property="product:price:amount"]').attr('content') || '';
-    let originalPrice = parseFloat(priceText || '0');
+    const title = $('title').text(); // Replace with actual scraping logic
+    const images = [];
+    $('img').each((_, el) => {
+      const src = $(el).attr('src');
+      if (src && src.includes('temu') || src.includes('pascaldesign')) {
+        images.push(src);
+      }
+    });
 
-    if (!originalPrice || isNaN(originalPrice)) {
-      const fallback = $('body').text().match(/\$\d+(\.\d+)?/g);
-      originalPrice = fallback ? parseFloat(fallback[0].replace('$', '')) : 0;
-    }
-
-    const currencyConverter = new CurrencyConverter();
-    const nairaPrice = await currencyConverter.from('USD').to('NGN').amount(originalPrice).convert();
-
-    const markupRate = nairaPrice <= 10000 ? 1.45 : 1.30;
-    const finalPrice = Math.ceil(nairaPrice * markupRate);
-
-    const category = finalPrice > 100 * 100 ? 'Luxury' : 'Customized';
-    const image = $('img').first().attr('src') || '';
-
-    const product = {
+    res.status(200).json({
       title,
-      link,
-      image,
-      originalPriceUSD: originalPrice,
-      convertedPriceNGN: finalPrice,
-      category,
-    };
-
-    res.status(200).json({ message: 'Product imported successfully', product });
+      images,
+      price: 10000, // Placeholder for price logic
+      description: 'Fetched product details',
+    });
   } catch (error) {
-    console.error('Scrape error:', error.message);
-    res.status(500).json({ message: 'Failed to import product' });
+    res.status(500).json({ error: 'Failed to import product.' });
   }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Custave backend running on port ${PORT}`));
+app.get('/', (req, res) => {
+  res.send('Custave backend is live 🚀');
+});
+
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+});
